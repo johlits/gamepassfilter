@@ -1,0 +1,73 @@
+﻿@page "/games"
+
+@using GamePassFilter.Data
+@inject GameService GS
+@inject ProductService PS
+@inject OpenCriticService OCS
+
+<h1>Games</h1>
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>title</th>
+                <th>score</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var game in games)
+            {
+            <tr>
+                <td>@game.title</td>
+                <td>@game.score</td>
+            </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Game> games;
+    private Dictionary<string, Game> gamesDict;
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        games = (await GS.GetGamesAsync()).Skip(1).ToList();
+        gamesDict = new Dictionary<string, Game>();
+        foreach (var game in games)
+        {
+            gamesDict.Add(game.id, game);
+        }
+
+        var products = (await PS.GetProductsAsync(games.Select(x => x.id).ToList()));
+        foreach (var product in products.Products)
+        {
+            gamesDict[product.ProductId].title = product.LocalizedProperties[0].ProductTitle;
+            var gameId = "" + (await OCS.GetGameIdAsync(gamesDict[product.ProductId].title)).First().id;
+            var reviews = (await OCS.GetGameReviewsAsync(gameId));
+            long cnt = 0;
+            long acc = 0;
+            foreach (var review in reviews)
+            {
+                if (review.Score != null)
+                {
+                    acc += (long)review.Score;
+                    cnt++;
+                }
+            }
+            if (cnt > 0)
+            {
+                gamesDict[product.ProductId].score = (int)(acc / cnt);
+            }
+        }
+        games.Sort((a, b) => a.score < b.score ? 1 : (a.score > b.score ? -1 : 0));
+        loading = false;
+    }
+}
